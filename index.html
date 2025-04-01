@@ -3,6 +3,16 @@
 <head>
     <title>Excel File Analyzer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        function checkAccess() {
+            let password = prompt("Enter password to access:");
+            if (password !== "mysecurepassword") {
+                alert("Access Denied!");
+                document.body.innerHTML = ""; // Block access
+            }
+        }
+        window.onload = checkAccess;
+    </script>
 </head>
 <body>
     <h2>Upload an Excel File</h2>
@@ -32,15 +42,16 @@
                 let workbook = XLSX.read(data, { type: 'array' });
                 let sheet = workbook.Sheets[workbook.SheetNames[0]];
                 
+                // Convert the sheet to JSON, skipping the first 5 rows
                 let jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, range: 5 });
                 
-                if (jsonData.length < 2) {
+                if (jsonData.length < 2) { // Need at least header + one row
                     alert("No data found in the sheet.");
                     return;
                 }
                 
-                let headers = jsonData[0].map(h => h.trim().toLowerCase());
-                let dataRows = jsonData.slice(1);
+                let headers = jsonData[0].map(h => h.trim().toLowerCase()); // Normalize headers
+                let dataRows = jsonData.slice(1); // Data starts from 7th row onwards
                 
                 let requiredColumns = {
                     'scrip name': 'Scrip Name',
@@ -66,44 +77,34 @@
                 
                 tableHeaders = ['Scrip Name', 'Code', 'Name', 'Quantity'];
                 
-                let aggregatedData = {};
-
-                dataRows.forEach(row => {
-                    let boughtCode = row[columnIndices['bought code']] || "";
-                    let soldCode = row[columnIndices['sold code']] || "";
-                    let boughtQuantity = row[columnIndices['bought quantity']] || 0;
-                    let soldQuantity = row[columnIndices['sold quantity']] || 0;
-                    let key = "";
-                    let entry = null;
-                    
-                    if (boughtCode === 'SYS18' || boughtCode === 'SYS27') {
-                        key = `${row[columnIndices['scrip name']]}_${row[columnIndices['sold code']]}_${row[columnIndices['sold name']]}`;
-                        entry = {
-                            'Scrip Name': row[columnIndices['scrip name']] || "",
-                            'Code': row[columnIndices['sold code']] || "",
-                            'Name': row[columnIndices['sold name']] || "",
-                            'Quantity': -Math.abs(soldQuantity)
-                        };
-                    } else if (soldCode === 'SYS18' || soldCode === 'SYS27') {
-                        key = `${row[columnIndices['scrip name']]}_${row[columnIndices['bought code']]}_${row[columnIndices['bought name']]}`;
-                        entry = {
-                            'Scrip Name': row[columnIndices['scrip name']] || "",
-                            'Code': row[columnIndices['bought code']] || "",
-                            'Name': row[columnIndices['bought name']] || "",
-                            'Quantity': Math.abs(boughtQuantity)
-                        };
-                    }
-                    
-                    if (entry) {
-                        if (!aggregatedData[key]) {
-                            aggregatedData[key] = entry;
-                        } else {
-                            aggregatedData[key]['Quantity'] += entry['Quantity'];
+                fullData = dataRows
+                    .map(row => {
+                        let boughtCode = row[columnIndices['bought code']] || "";
+                        let soldCode = row[columnIndices['sold code']] || "";
+                        let boughtQuantity = row[columnIndices['bought quantity']] || 0;
+                        let soldQuantity = row[columnIndices['sold quantity']] || 0;
+                        let entry = null;
+                        
+                        if (boughtCode === 'SYS18' || boughtCode === 'SYS27') {
+                            entry = {
+                                'Scrip Name': row[columnIndices['scrip name']] || "",
+                                'Code': row[columnIndices['sold code']] || "",
+                                'Name': row[columnIndices['sold name']] || "",
+                                'Quantity': -Math.abs(soldQuantity) // Negative Sold Quantity
+                            };
+                        } else if (soldCode === 'SYS18' || soldCode === 'SYS27') {
+                            entry = {
+                                'Scrip Name': row[columnIndices['scrip name']] || "",
+                                'Code': row[columnIndices['bought code']] || "",
+                                'Name': row[columnIndices['bought name']] || "",
+                                'Quantity': Math.abs(boughtQuantity) // Positive Bought Quantity
+                            };
                         }
-                    }
-                });
+                        
+                        return entry && (entry.Quantity > 5000 || entry.Quantity < -5000) ? entry : null;
+                    })
+                    .filter(row => row !== null);
                 
-                fullData = Object.values(aggregatedData).filter(row => row.Quantity > 5000 || row.Quantity < -5000);
                 document.getElementById("rowCount").innerText = fullData.length;
                 
                 currentRow = 0;
