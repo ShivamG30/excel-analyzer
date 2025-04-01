@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Excel File Analyzer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <h2>Upload an Excel File</h2>
+    <input type="file" id="fileInput" />
+    <button onclick="processFile()">Analyze</button>
+    <h3>Results:</h3>
+    <div id="output"></div>
+    <h3>Total Rows Displayed: <span id="rowCount">0</span></h3>
+    <button id="loadMore" style="display:none;" onclick="loadMoreRows()">Load More</button>
+
+    <script>
+        let fullData = [];
+        let currentRow = 0;
+        const rowsPerLoad = 500;
+        let tableHeaders = [];
+
+        function processFile() {
+            let fileInput = document.getElementById('fileInput').files[0];
+            if (!fileInput) {
+                alert("Please upload a file first.");
+                return;
+            }
+            
+            let reader = new FileReader();
+            reader.onload = function (e) {
+                let data = new Uint8Array(e.target.result);
+                let workbook = XLSX.read(data, { type: 'array' });
+                let sheet = workbook.Sheets[workbook.SheetNames[0]];
+                
+                let jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, range: 5 });
+                
+                if (jsonData.length < 2) {
+                    alert("No data found in the sheet.");
+                    return;
+                }
+                
+                let headers = jsonData[0].map(h => h.trim().toLowerCase());
+                let dataRows = jsonData.slice(1);
+                
+                let requiredColumns = {
+                    'scrip name': 'Scrip Name',
+                    'bought code': 'Bought Code',
+                    'bought name': 'Bought Name',
+                    'bought quantity': 'Bought Quantity',
+                    'sold code': 'Sold Code',
+                    'sold name': 'Sold Name',
+                    'sold quantity': 'Sold Quantity'
+                };
+                
+                let columnIndices = {};
+                headers.forEach((col, index) => {
+                    if (requiredColumns[col]) {
+                        columnIndices[col] = index;
+                    }
+                });
+                
+                if (Object.keys(columnIndices).length === 0) {
+                    alert("No matching columns found. Please check the column names in your file.");
+                    return;
+                }
+                
+                tableHeaders = ['Scrip Name', 'Code', 'Name', 'Quantity'];
+                
+                let aggregatedData = {};
+
+                dataRows.forEach(row => {
+                    let boughtCode = row[columnIndices['bought code']] || "";
+                    let soldCode = row[columnIndices['sold code']] || "";
+                    let boughtQuantity = row[columnIndices['bought quantity']] || 0;
+                    let soldQuantity = row[columnIndices['sold quantity']] || 0;
+                    let key = "";
+                    let entry = null;
+                    
+                    if (boughtCode === 'SYS18' || boughtCode === 'SYS27') {
+                        key = `${row[columnIndices['scrip name']]}_${row[columnIndices['sold code']]}_${row[columnIndices['sold name']]}`;
+                        entry = {
+                            'Scrip Name': row[columnIndices['scrip name']] || "",
+                            'Code': row[columnIndices['sold code']] || "",
+                            'Name': row[columnIndices['sold name']] || "",
+                            'Quantity': -Math.abs(soldQuantity)
+                        };
+                    } else if (soldCode === 'SYS18' || soldCode === 'SYS27') {
+                        key = `${row[columnIndices['scrip name']]}_${row[columnIndices['bought code']]}_${row[columnIndices['bought name']]}`;
+                        entry = {
+                            'Scrip Name': row[columnIndices['scrip name']] || "",
+                            'Code': row[columnIndices['bought code']] || "",
+                            'Name': row[columnIndices['bought name']] || "",
+                            'Quantity': Math.abs(boughtQuantity)
+                        };
+                    }
+                    
+                    if (entry) {
+                        if (!aggregatedData[key]) {
+                            aggregatedData[key] = entry;
+                        } else {
+                            aggregatedData[key]['Quantity'] += entry['Quantity'];
+                        }
+                    }
+                });
+                
+                fullData = Object.values(aggregatedData).filter(row => row.Quantity > 5000 || row.Quantity < -5000);
+                document.getElementById("rowCount").innerText = fullData.length;
+                
+                currentRow = 0;
+                document.getElementById("loadMore").style.display = "block";
+                loadMoreRows();
+            };
+            
+            reader.readAsArrayBuffer(fileInput);
+        }
+
+        function loadMoreRows() {
+            let tableHtml = "<table border='1'><tr>" +
+                tableHeaders.map(col => `<th>${col}</th>`).join('') + "</tr>";
+            
+            let rowsToShow = fullData.slice(currentRow, currentRow + rowsPerLoad);
+            tableHtml += rowsToShow.map(row => "<tr>" + Object.values(row).map(val => `<td>${val}</td>`).join('') + "</tr>").join('');
+            
+            document.getElementById("output").innerHTML = tableHtml;
+            
+            currentRow += rowsPerLoad;
+            if (currentRow >= fullData.length) {
+                document.getElementById("loadMore").style.display = "none";
+            }
+        }
+    </script>
+</body>
+</html>
