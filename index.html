@@ -9,12 +9,8 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
             text-align: center;
             background-color: #f4f4f4;
-        }
-        h2, h3 {
-            color: #333;
         }
         .container {
             background: #fff;
@@ -53,17 +49,31 @@
         th {
             background-color: #007bff;
             color: white;
+            cursor: pointer;
+        }
+        #downloadButton {
+            display: none;
         }
     </style>
+    <script>
+        function checkAccess() {
+            let password = prompt("Enter password to access:");
+            if (password !== "mysecurepassword") {
+                alert("Access Denied!");
+                document.body.innerHTML = ""; // Block access
+            }
+        }
+        window.onload = checkAccess;
+    </script>
 </head>
 <body>
     <div class="container">
         <h2>Excel File Analyzer</h2>
         <input type="file" id="fileInput" />
         <button onclick="processFile()">Analyze</button>
+        <input type="text" id="searchInput" placeholder="Search..." onkeyup="filterTable()">
+        <button id="downloadButton" onclick="downloadExcel()">Download as Excel</button>
         <h3>Results:</h3>
-        <input type="text" id="searchInput" placeholder="Search...">
-        <button onclick="downloadExcel()">Download as Excel</button>
         <table id="resultTable" class="display">
             <thead>
                 <tr>
@@ -79,7 +89,7 @@
     </div>
     <script>
         let fullData = [];
-        
+
         function processFile() {
             let fileInput = document.getElementById('fileInput').files[0];
             if (!fileInput) {
@@ -103,79 +113,71 @@
                 let headers = jsonData[0].map(h => h.trim().toLowerCase());
                 let dataRows = jsonData.slice(1);
                 
-                let requiredColumns = {
-                    'scrip name': 'Scrip Name',
-                    'bought code': 'Bought Code',
-                    'bought name': 'Bought Name',
-                    'bought quantity': 'Bought Quantity',
-                    'sold code': 'Sold Code',
-                    'sold name': 'Sold Name',
-                    'sold quantity': 'Sold Quantity'
+                let columnIndices = {
+                    'scrip name': headers.indexOf('scrip name'),
+                    'bought code': headers.indexOf('bought code'),
+                    'bought name': headers.indexOf('bought name'),
+                    'bought quantity': headers.indexOf('bought quantity'),
+                    'sold code': headers.indexOf('sold code'),
+                    'sold name': headers.indexOf('sold name'),
+                    'sold quantity': headers.indexOf('sold quantity')
                 };
                 
-                let columnIndices = {};
-                headers.forEach((col, index) => {
-                    if (requiredColumns[col]) {
-                        columnIndices[col] = index;
-                    }
-                });
-                
-                if (Object.keys(columnIndices).length === 0) {
-                    alert("No matching columns found. Please check the column names in your file.");
-                    return;
-                }
-                
-                let dataMap = new Map();
+                let tempData = {};
                 
                 dataRows.forEach(row => {
-                    let boughtCode = row[columnIndices['bought code']] || "";
-                    let soldCode = row[columnIndices['sold code']] || "";
-                    let boughtQuantity = row[columnIndices['bought quantity']] || 0;
-                    let soldQuantity = row[columnIndices['sold quantity']] || 0;
-                    let key = "";
-                    let quantity = 0;
-                    
-                    if (boughtCode === 'SYS18' || boughtCode === 'SYS27') {
-                        key = (row[columnIndices['scrip name']] || "") + "|" + (row[columnIndices['sold name']] || "");
-                        quantity = -Math.abs(soldQuantity);
-                    } else if (soldCode === 'SYS18' || soldCode === 'SYS27') {
-                        key = (row[columnIndices['scrip name']] || "") + "|" + (row[columnIndices['bought name']] || "");
-                        quantity = Math.abs(boughtQuantity);
+                    let entry = null;
+                    if (row[columnIndices['bought code']] === 'SYS18' || row[columnIndices['bought code']] === 'SYS27') {
+                        entry = {
+                            'Scrip Name': row[columnIndices['scrip name']],
+                            'Code': row[columnIndices['sold code']],
+                            'Name': row[columnIndices['sold name']],
+                            'Quantity': -Math.abs(row[columnIndices['sold quantity']])
+                        };
+                    } else if (row[columnIndices['sold code']] === 'SYS18' || row[columnIndices['sold code']] === 'SYS27') {
+                        entry = {
+                            'Scrip Name': row[columnIndices['scrip name']],
+                            'Code': row[columnIndices['bought code']],
+                            'Name': row[columnIndices['bought name']],
+                            'Quantity': Math.abs(row[columnIndices['bought quantity']])
+                        };
                     }
                     
-                    if (key) {
-                        if (dataMap.has(key)) {
-                            dataMap.set(key, dataMap.get(key) + quantity);
+                    if (entry) {
+                        let key = entry['Scrip Name'] + '|' + entry['Name'];
+                        if (tempData[key]) {
+                            tempData[key]['Quantity'] += entry['Quantity'];
                         } else {
-                            dataMap.set(key, quantity);
+                            tempData[key] = entry;
                         }
                     }
                 });
                 
-                fullData = Array.from(dataMap.entries())
-                    .map(([key, quantity]) => {
-                        let [scripName, name] = key.split("|");
-                        return { 'Scrip Name': scripName, 'Code': '', 'Name': name, 'Quantity': quantity };
-                    })
-                    .filter(row => row.Quantity > 5000 || row.Quantity < -5000);
+                fullData = Object.values(tempData).filter(row => row.Quantity > 5000 || row.Quantity < -5000);
                 
                 document.getElementById("rowCount").innerText = fullData.length;
-                
-                $(document).ready(function() {
-                    $('#resultTable').DataTable({
-                        destroy: true,
-                        data: fullData,
-                        columns: [
-                            { data: 'Scrip Name' },
-                            { data: 'Code' },
-                            { data: 'Name' },
-                            { data: 'Quantity' }
-                        ]
-                    });
-                });
+                displayTable(fullData);
+                document.getElementById("downloadButton").style.display = 'inline-block';
             };
             
             reader.readAsArrayBuffer(fileInput);
+        }
+
+        function displayTable(data) {
+            let tbody = document.querySelector("#resultTable tbody");
+            tbody.innerHTML = "";
+            data.forEach(row => {
+                let tr = `<tr><td>${row['Scrip Name']}</td><td>${row['Code']}</td><td>${row['Name']}</td><td>${row['Quantity']}</td></tr>`;
+                tbody.innerHTML += tr;
+            });
+            $('#resultTable').DataTable();
+        }
+
+        function downloadExcel() {
+            let ws = XLSX.utils.json_to_sheet(fullData);
+            let wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Results");
+            XLSX.writeFile(wb, "Analyzed_Data.xlsx");
         }
     </script>
 </body>
