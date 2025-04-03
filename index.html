@@ -3,6 +3,58 @@
 <head>
     <title>Excel File Analyzer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            text-align: center;
+            background-color: #f4f4f4;
+        }
+        h2, h3 {
+            color: #333;
+        }
+        .container {
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            display: inline-block;
+            margin-top: 20px;
+        }
+        input, button {
+            padding: 10px;
+            margin: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #28a745;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
     <script>
         function checkAccess() {
             let password = prompt("Enter password to access:");
@@ -15,14 +67,15 @@
     </script>
 </head>
 <body>
-    <h2>Upload an Excel File</h2>
-    <input type="file" id="fileInput" />
-    <button onclick="processFile()">Analyze</button>
-    <h3>Results:</h3>
-    <div id="output"></div>
-    <h3>Total Rows Displayed: <span id="rowCount">0</span></h3>
-    <button id="loadMore" style="display:none;" onclick="loadMoreRows()">Load More</button>
-
+    <div class="container">
+        <h2>Excel File Analyzer</h2>
+        <input type="file" id="fileInput" />
+        <button onclick="processFile()">Analyze</button>
+        <h3>Results:</h3>
+        <div id="output"></div>
+        <h3>Total Rows Displayed: <span id="rowCount">0</span></h3>
+        <button id="loadMore" class="hidden" onclick="loadMoreRows()">Load More</button>
+    </div>
     <script>
         let fullData = [];
         let currentRow = 0;
@@ -112,7 +165,7 @@
                 document.getElementById("rowCount").innerText = fullData.length;
                 
                 currentRow = 0;
-                document.getElementById("loadMore").style.display = "block";
+                document.getElementById("loadMore").classList.remove("hidden");
                 loadMoreRows();
             };
             
@@ -120,7 +173,7 @@
         }
 
         function loadMoreRows() {
-            let tableHtml = "<table border='1'><tr>" +
+            let tableHtml = "<table><tr>" +
                 tableHeaders.map(col => `<th>${col}</th>`).join('') + "</tr>";
             
             let rowsToShow = fullData.slice(currentRow, currentRow + rowsPerLoad);
@@ -130,7 +183,7 @@
             
             currentRow += rowsPerLoad;
             if (currentRow >= fullData.length) {
-                document.getElementById("loadMore").style.display = "none";
+                document.getElementById("loadMore").classList.add("hidden");
             }
         }
     </script>
