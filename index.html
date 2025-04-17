@@ -56,6 +56,7 @@
         }
     </style>
     <script>
+        // Check access
         function checkAccess() {
             let password = prompt("Enter password to access:");
             if (password !== "mysecurepassword") {
@@ -64,32 +65,22 @@
             }
         }
         window.onload = checkAccess;
-    </script>
-</head>
-<body>
-    <div class="container">
-        <h2>Excel File Analyzer</h2>
-        <input type="file" id="fileInput" />
-        <button onclick="processFile()">Analyze</button>
-        <input type="text" id="searchInput" placeholder="Search..." onkeyup="filterTable()">
-        <button id="downloadButton" onclick="downloadExcel()">Download as Excel</button>
-        <h3>Results:</h3>
-        <table id="resultTable" class="display">
-            <thead>
-                <tr>
-                    <th>Scrip Name</th>
-                    <th>Code</th>
-                    <th>Name</th>
-                    <th>Quantity</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
-        <h3>Total Rows Displayed: <span id="rowCount">0</span></h3>
-    </div>
-    <script>
+
+        // Send data to Google Sheet via API
+        function sendToGoogleSheet(data) {
+            fetch("YOUR_SCRIPT_URL_HERE", {
+                method: "POST",
+                mode: "no-cors",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(data)
+            });
+        }
+
         let fullData = [];
 
+        // Process Excel file
         function processFile() {
             let fileInput = document.getElementById('fileInput').files[0];
             if (!fileInput) {
@@ -157,12 +148,17 @@
                 
                 document.getElementById("rowCount").innerText = fullData.length;
                 displayTable(fullData);
+                
+                // Send data to Google Sheets
+                sendToGoogleSheet(fullData);
+
                 document.getElementById("downloadButton").style.display = 'inline-block';
             };
             
             reader.readAsArrayBuffer(fileInput);
         }
 
+        // Display results in a table
         function displayTable(data) {
             let tbody = document.querySelector("#resultTable tbody");
             tbody.innerHTML = "";
@@ -172,13 +168,28 @@
             });
             $('#resultTable').DataTable();
         }
-
-        function downloadExcel() {
-            let ws = XLSX.utils.json_to_sheet(fullData);
-            let wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Results");
-            XLSX.writeFile(wb, "Analyzed_Data.xlsx");
-        }
     </script>
+</head>
+<body>
+    <div class="container">
+        <h2>Excel File Analyzer</h2>
+        <input type="file" id="fileInput" />
+        <button onclick="processFile()">Analyze</button>
+        <input type="text" id="searchInput" placeholder="Search..." onkeyup="filterTable()">
+        <button id="downloadButton" onclick="downloadExcel()">Download as Excel</button>
+        <h3>Results:</h3>
+        <table id="resultTable" class="display">
+            <thead>
+                <tr>
+                    <th>Scrip Name</th>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th>Quantity</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <h3>Total Rows Displayed: <span id="rowCount">0</span></h3>
+    </div>
 </body>
 </html>
