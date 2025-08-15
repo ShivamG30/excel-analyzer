@@ -25,6 +25,7 @@
   </style>
 
   <script>
+    // Simple page lock
     function checkAccess() {
       var password = prompt("Enter password to access:");
       if (password !== "mysecurepassword") {
@@ -47,7 +48,7 @@
         source: "excel-analyzer"
       });
 
-      // 1) Try normal fetch (readable response)
+      // 1) Normal fetch (reads server response)
       try {
         const res = await fetch(WEB_APP_URL, {
           method: "POST",
@@ -60,15 +61,14 @@
           alert(`Saved ${json.appended || 0} row(s) to Google Sheet.`);
           return;
         } else {
-          // If server responded but not ok
           alert(`Save failed (server replied): ${JSON.stringify(json)}`);
           return;
         }
       } catch (err) {
-        console.warn("Normal fetch failed, will retry with no-cors. Reason:", err);
+        console.warn("Normal fetch failed, retrying with no-cors:", err);
       }
 
-      // 2) Fallback: fire-and-forget (no-cors). Can't read response; ask user to check sheet.
+      // 2) Fallback: fire-and-forget
       try {
         await fetch(WEB_APP_URL, {
           method: "POST",
@@ -78,7 +78,6 @@
         });
         alert("Sent (fallback). Please check your Google Sheet for a new row.");
       } catch (err2) {
-        console.error("Fallback send failed:", err2);
         alert("Save failed completely: " + err2.message);
       }
     }
@@ -122,10 +121,7 @@
 
     function processFile() {
       const file = document.getElementById('fileInput').files[0];
-      if (!file) {
-        alert("Please upload a file first.");
-        return;
-      }
+      if (!file) { alert("Please upload a file first."); return; }
 
       const reader = new FileReader();
       reader.onload = function (e) {
@@ -135,11 +131,7 @@
 
         // Read from row 6 (0-indexed range start = 5)
         const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, range: 5 });
-
-        if (jsonData.length < 2) {
-          alert("No data found in the sheet.");
-          return;
-        }
+        if (jsonData.length < 2) { alert("No data found in the sheet."); return; }
 
         const headers = jsonData[0].map(h => String(h || "").trim().toLowerCase());
         const rows = jsonData.slice(1);
@@ -152,7 +144,7 @@
           'sold code': headers.indexOf('sold code'),
           'sold name': headers.indexOf('sold name'),
           'sold quantity': headers.indexOf('sold quantity'),
-          'ae code': headers.indexOf('ae code') // AE column support
+          'ae code': headers.indexOf('ae code') // AE support
         };
 
         const tempData = {};
@@ -169,10 +161,7 @@
           const soldQty    = Number(row[idx['sold quantity']]);
           const aeCode     = idx['ae code'] >= 0 ? row[idx['ae code']] : undefined;
 
-          // Treat AE like an extra "code" that can be SYS18/SYS27
-          // Logic:
-          // - If boughtCode == SYS18/SYS27 OR aeCode == SYS18/SYS27 -> negative (use SOLD fields)
-          // - Else if soldCode == SYS18/SYS27                     -> positive (use BOUGHT fields)
+          // AE acts like additional code trigger
           if (boughtCode === 'SYS18' || boughtCode === 'SYS27' || aeCode === 'SYS18' || aeCode === 'SYS27') {
             entry = {
               'Scrip Name': scripName,
@@ -191,15 +180,11 @@
 
           if (entry) {
             const key = `${entry['Scrip Name']}|${entry['Name']}`;
-            if (tempData[key]) {
-              tempData[key]['Quantity'] += entry['Quantity'];
-            } else {
-              tempData[key] = entry;
-            }
+            if (tempData[key]) tempData[key]['Quantity'] += entry['Quantity'];
+            else tempData[key] = entry;
           }
         });
 
-        // Show "all rows" that match your business rule (|qty| > 5000)
         fullData = Object.values(tempData).filter(r => r.Quantity > 5000 || r.Quantity < -5000);
 
         document.getElementById("rowCount").innerText = fullData.length;
@@ -207,9 +192,7 @@
         document.getElementById("downloadButton").style.display = 'inline-block';
 
         // Auto-save rows shown in the table
-        if (fullData.length) {
-          sendToGoogleSheet(fullData);
-        }
+        if (fullData.length) sendToGoogleSheet(fullData);
       };
 
       reader.readAsArrayBuffer(file);
@@ -228,9 +211,7 @@
         tbody.insertAdjacentHTML('beforeend', tr);
       });
 
-      if (dataTableInstance) {
-        dataTableInstance.destroy();
-      }
+      if (dataTableInstance) dataTableInstance.destroy();
       dataTableInstance = $('#resultTable').DataTable();
     }
 
@@ -243,17 +224,12 @@
 
     function filterTable() {
       const query = document.getElementById('searchInput').value;
-      if (dataTableInstance) {
-        dataTableInstance.search(query).draw();
-      }
+      if (dataTableInstance) dataTableInstance.search(query).draw();
     }
 
-    // Save whatever rows are currently shown in the table
+    // Save whatever rows are currently shown
     function saveCurrentTable() {
-      if (!fullData || !fullData.length) {
-        alert("No rows to save. Analyze a file first.");
-        return;
-      }
+      if (!fullData || !fullData.length) { alert("No rows to save. Analyze a file first."); return; }
       sendToGoogleSheet(fullData);
     }
   </script>
