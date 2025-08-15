@@ -1,184 +1,261 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Excel File Analyzer</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/datatables/1.10.21/js/jquery.dataTables.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/datatables/1.10.21/css/jquery.dataTables.min.css">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            background-color: #f4f4f4;
+  <meta charset="UTF-8" />
+  <title>Excel File Analyzer</title>
+
+  <!-- Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/datatables/1.10.21/js/jquery.dataTables.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/datatables/1.10.21/css/jquery.dataTables.min.css">
+
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f4; }
+    .container { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); display: inline-block; margin-top: 20px; max-width: 1100px; }
+    input, button { padding: 10px; margin: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; }
+    button { background-color: #28a745; color: white; cursor: pointer; }
+    button:hover { background-color: #218838; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+    th { background-color: #007bff; color: white; cursor: pointer; }
+    #downloadButton { display: none; }
+    .btn-secondary { background-color: #6c757d; }
+    .btn-secondary:hover { background-color: #5a6268; }
+  </style>
+
+  <script>
+    function checkAccess() {
+      var password = prompt("Enter password to access:");
+      if (password !== "mysecurepassword") {
+        alert("Access Denied!");
+        document.body.innerHTML = ""; // Block access
+      }
+    }
+    window.onload = checkAccess;
+
+    // === Send results to Google Sheets Web App (robust with fallback) ===
+    async function sendToGoogleSheet(rows) {
+      const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz-IjaF-_2Xn9zV3_pQ3JGMK1v2fWqM_jueyV2p95Us_NzUlpCP7CJShPplmGdrxQC7oA/exec";
+      const APP_KEY = "sg_excel_analyzer_9c2e1b6e4f0f4c1ab2a3"; // must match Code.gs
+
+      const body = JSON.stringify({
+        appKey: APP_KEY,
+        rows,
+        ts: new Date().toISOString(),
+        ua: navigator.userAgent,
+        source: "excel-analyzer"
+      });
+
+      // 1) Try normal fetch (readable response)
+      try {
+        const res = await fetch(WEB_APP_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body
+        });
+        const json = await res.json().catch(() => ({}));
+        console.log("Save response (normal):", json);
+        if (json && json.status === "ok") {
+          alert(`Saved ${json.appended || 0} row(s) to Google Sheet.`);
+          return;
+        } else {
+          // If server responded but not ok
+          alert(`Save failed (server replied): ${JSON.stringify(json)}`);
+          return;
         }
-        .container {
-            background: #fff;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-            display: inline-block;
-            margin-top: 20px;
-        }
-        input, button {
-            padding: 10px;
-            margin: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            font-size: 16px;
-        }
-        button {
-            background-color: #28a745;
-            color: white;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #218838;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            background: white;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 10px;
-            text-align: left;
-        }
-        th {
-            background-color: #007bff;
-            color: white;
-            cursor: pointer;
-        }
-        #downloadButton {
-            display: none;
-        }
-    </style>
-    <script>
-        function checkAccess() {
-            let password = prompt("Enter password to access:");
-            if (password !== "mysecurepassword") {
-                alert("Access Denied!");
-                document.body.innerHTML = ""; // Block access
-            }
-        }
-        window.onload = checkAccess;
-    </script>
+      } catch (err) {
+        console.warn("Normal fetch failed, will retry with no-cors. Reason:", err);
+      }
+
+      // 2) Fallback: fire-and-forget (no-cors). Can't read response; ask user to check sheet.
+      try {
+        await fetch(WEB_APP_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body
+        });
+        alert("Sent (fallback). Please check your Google Sheet for a new row.");
+      } catch (err2) {
+        console.error("Fallback send failed:", err2);
+        alert("Save failed completely: " + err2.message);
+      }
+    }
+  </script>
 </head>
 <body>
-    <div class="container">
-        <h2>Excel File Analyzer</h2>
-        <input type="file" id="fileInput" />
-        <button onclick="processFile()">Analyze</button>
-        <input type="text" id="searchInput" placeholder="Search..." onkeyup="filterTable()">
-        <button id="downloadButton" onclick="downloadExcel()">Download as Excel</button>
-        <h3>Results:</h3>
-        <table id="resultTable" class="display">
-            <thead>
-                <tr>
-                    <th>Scrip Name</th>
-                    <th>Code</th>
-                    <th>Name</th>
-                    <th>Quantity</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
-        <h3>Total Rows Displayed: <span id="rowCount">0</span></h3>
-    </div>
-    <script>
-        let fullData = [];
+  <div class="container">
+    <h2>Excel File Analyzer</h2>
 
-        function processFile() {
-            let fileInput = document.getElementById('fileInput').files[0];
-            if (!fileInput) {
-                alert("Please upload a file first.");
-                return;
-            }
-            
-            let reader = new FileReader();
-            reader.onload = function (e) {
-                let data = new Uint8Array(e.target.result);
-                let workbook = XLSX.read(data, { type: 'array' });
-                let sheet = workbook.Sheets[workbook.SheetNames[0]];
-                
-                let jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, range: 5 });
-                
-                if (jsonData.length < 2) {
-                    alert("No data found in the sheet.");
-                    return;
-                }
-                
-                let headers = jsonData[0].map(h => h.trim().toLowerCase());
-                let dataRows = jsonData.slice(1);
-                
-                let columnIndices = {
-                    'scrip name': headers.indexOf('scrip name'),
-                    'bought code': headers.indexOf('bought code'),
-                    'bought name': headers.indexOf('bought name'),
-                    'bought quantity': headers.indexOf('bought quantity'),
-                    'sold code': headers.indexOf('sold code'),
-                    'sold name': headers.indexOf('sold name'),
-                    'sold quantity': headers.indexOf('sold quantity')
-                };
-                
-                let tempData = {};
-                
-                dataRows.forEach(row => {
-                    let entry = null;
-                    if (row[columnIndices['bought code']] === 'SYS18' || row[columnIndices['bought code']] === 'SYS27') {
-                        entry = {
-                            'Scrip Name': row[columnIndices['scrip name']],
-                            'Code': row[columnIndices['sold code']],
-                            'Name': row[columnIndices['sold name']],
-                            'Quantity': -Math.abs(row[columnIndices['sold quantity']])
-                        };
-                    } else if (row[columnIndices['sold code']] === 'SYS18' || row[columnIndices['sold code']] === 'SYS27') {
-                        entry = {
-                            'Scrip Name': row[columnIndices['scrip name']],
-                            'Code': row[columnIndices['bought code']],
-                            'Name': row[columnIndices['bought name']],
-                            'Quantity': Math.abs(row[columnIndices['bought quantity']])
-                        };
-                    }
-                    
-                    if (entry) {
-                        let key = entry['Scrip Name'] + '|' + entry['Name'];
-                        if (tempData[key]) {
-                            tempData[key]['Quantity'] += entry['Quantity'];
-                        } else {
-                            tempData[key] = entry;
-                        }
-                    }
-                });
-                
-                fullData = Object.values(tempData).filter(row => row.Quantity > 5000 || row.Quantity < -5000);
-                
-                document.getElementById("rowCount").innerText = fullData.length;
-                displayTable(fullData);
-                document.getElementById("downloadButton").style.display = 'inline-block';
+    <!-- Helper buttons -->
+    <button class="btn-secondary" onclick="sendToGoogleSheet([{ 'Scrip Name':'Test', Code:'ABC', Name:'Demo', Quantity:123 }])">
+      Test Save to Sheet
+    </button>
+    <button class="btn-secondary" onclick="saveCurrentTable()">Save Now (All Rows Shown)</button>
+    <br/>
+
+    <input type="file" id="fileInput" />
+    <button onclick="processFile()">Analyze</button>
+    <input type="text" id="searchInput" placeholder="Search..." onkeyup="filterTable()">
+    <button id="downloadButton" onclick="downloadExcel()">Download as Excel</button>
+
+    <h3>Results:</h3>
+    <table id="resultTable" class="display">
+      <thead>
+        <tr>
+          <th>Scrip Name</th>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Quantity</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <h3>Total Rows Displayed: <span id="rowCount">0</span></h3>
+  </div>
+
+  <script>
+    let fullData = [];
+    let dataTableInstance = null;
+
+    function processFile() {
+      const file = document.getElementById('fileInput').files[0];
+      if (!file) {
+        alert("Please upload a file first.");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+        // Read from row 6 (0-indexed range start = 5)
+        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, range: 5 });
+
+        if (jsonData.length < 2) {
+          alert("No data found in the sheet.");
+          return;
+        }
+
+        const headers = jsonData[0].map(h => String(h || "").trim().toLowerCase());
+        const rows = jsonData.slice(1);
+
+        const idx = {
+          'scrip name': headers.indexOf('scrip name'),
+          'bought code': headers.indexOf('bought code'),
+          'bought name': headers.indexOf('bought name'),
+          'bought quantity': headers.indexOf('bought quantity'),
+          'sold code': headers.indexOf('sold code'),
+          'sold name': headers.indexOf('sold name'),
+          'sold quantity': headers.indexOf('sold quantity'),
+          'ae code': headers.indexOf('ae code') // AE column support
+        };
+
+        const tempData = {};
+
+        rows.forEach(row => {
+          let entry = null;
+
+          const scripName = row[idx['scrip name']];
+          const boughtCode = row[idx['bought code']];
+          const boughtName = row[idx['bought name']];
+          const boughtQty  = Number(row[idx['bought quantity']]);
+          const soldCode   = row[idx['sold code']];
+          const soldName   = row[idx['sold name']];
+          const soldQty    = Number(row[idx['sold quantity']]);
+          const aeCode     = idx['ae code'] >= 0 ? row[idx['ae code']] : undefined;
+
+          // Treat AE like an extra "code" that can be SYS18/SYS27
+          // Logic:
+          // - If boughtCode == SYS18/SYS27 OR aeCode == SYS18/SYS27 -> negative (use SOLD fields)
+          // - Else if soldCode == SYS18/SYS27                     -> positive (use BOUGHT fields)
+          if (boughtCode === 'SYS18' || boughtCode === 'SYS27' || aeCode === 'SYS18' || aeCode === 'SYS27') {
+            entry = {
+              'Scrip Name': scripName,
+              'Code': soldCode,
+              'Name': soldName,
+              'Quantity': -Math.abs(soldQty)
             };
-            
-            reader.readAsArrayBuffer(fileInput);
-        }
+          } else if (soldCode === 'SYS18' || soldCode === 'SYS27') {
+            entry = {
+              'Scrip Name': scripName,
+              'Code': boughtCode,
+              'Name': boughtName,
+              'Quantity': Math.abs(boughtQty)
+            };
+          }
 
-        function displayTable(data) {
-            let tbody = document.querySelector("#resultTable tbody");
-            tbody.innerHTML = "";
-            data.forEach(row => {
-                let tr = `<tr><td>${row['Scrip Name']}</td><td>${row['Code']}</td><td>${row['Name']}</td><td>${row['Quantity']}</td></tr>`;
-                tbody.innerHTML += tr;
-            });
-            $('#resultTable').DataTable();
-        }
+          if (entry) {
+            const key = `${entry['Scrip Name']}|${entry['Name']}`;
+            if (tempData[key]) {
+              tempData[key]['Quantity'] += entry['Quantity'];
+            } else {
+              tempData[key] = entry;
+            }
+          }
+        });
 
-        function downloadExcel() {
-            let ws = XLSX.utils.json_to_sheet(fullData);
-            let wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Results");
-            XLSX.writeFile(wb, "Analyzed_Data.xlsx");
+        // Show "all rows" that match your business rule (|qty| > 5000)
+        fullData = Object.values(tempData).filter(r => r.Quantity > 5000 || r.Quantity < -5000);
+
+        document.getElementById("rowCount").innerText = fullData.length;
+        displayTable(fullData);
+        document.getElementById("downloadButton").style.display = 'inline-block';
+
+        // Auto-save rows shown in the table
+        if (fullData.length) {
+          sendToGoogleSheet(fullData);
         }
-    </script>
+      };
+
+      reader.readAsArrayBuffer(file);
+    }
+
+    function displayTable(data) {
+      const tbody = document.querySelector("#resultTable tbody");
+      tbody.innerHTML = "";
+      data.forEach(row => {
+        const tr = `<tr>
+            <td>${row['Scrip Name'] ?? ''}</td>
+            <td>${row['Code'] ?? ''}</td>
+            <td>${row['Name'] ?? ''}</td>
+            <td>${row['Quantity'] ?? ''}</td>
+          </tr>`;
+        tbody.insertAdjacentHTML('beforeend', tr);
+      });
+
+      if (dataTableInstance) {
+        dataTableInstance.destroy();
+      }
+      dataTableInstance = $('#resultTable').DataTable();
+    }
+
+    function downloadExcel() {
+      const ws = XLSX.utils.json_to_sheet(fullData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Results");
+      XLSX.writeFile(wb, "Analyzed_Data.xlsx");
+    }
+
+    function filterTable() {
+      const query = document.getElementById('searchInput').value;
+      if (dataTableInstance) {
+        dataTableInstance.search(query).draw();
+      }
+    }
+
+    // Save whatever rows are currently shown in the table
+    function saveCurrentTable() {
+      if (!fullData || !fullData.length) {
+        alert("No rows to save. Analyze a file first.");
+        return;
+      }
+      sendToGoogleSheet(fullData);
+    }
+  </script>
 </body>
 </html>
