@@ -23,7 +23,7 @@
   </style>
 
   <script>
-    // (optional) simple lock — you can delete this whole function if you don’t want a password
+    // Optional password gate
     function checkAccess() {
       var password = prompt("Enter password to access:");
       if (password !== "mysecurepassword") {
@@ -33,10 +33,10 @@
     }
     window.onload = checkAccess;
 
-    // === send ONLY analyzed rows to Google Sheets ===
+    // Send analyzed rows to Google Sheets
     async function sendToGoogleSheet(rows) {
       const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz-IjaF-_2Xn9zV3_pQ3JGMK1v2fWqM_jueyV2p95Us_NzUlpCP7CJShPplmGdrxQC7oA/exec";
-      const APP_KEY = "sg_excel_analyzer_9c2e1b6e4f0f4c1ab2a3"; // must match Code.gs
+      const APP_KEY = "sg_excel_analyzer_9c2e1b6e4f0f4c1ab2a3";
 
       const body = JSON.stringify({
         appKey: APP_KEY,
@@ -49,7 +49,7 @@
       try {
         const res = await fetch(WEB_APP_URL, {
           method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" }, // simple & reliable
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
           body
         });
         const json = await res.json().catch(() => ({}));
@@ -59,7 +59,6 @@
           alert(`Save failed (server reply): ${JSON.stringify(json)}`);
         }
       } catch {
-        // fallback (some browsers/extensions block CORS — this still sends)
         try {
           await fetch(WEB_APP_URL, {
             method: "POST",
@@ -92,6 +91,7 @@
           <th>Code</th>
           <th>Name</th>
           <th>Quantity</th>
+          <th>Mkt. Value</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -129,8 +129,11 @@
           'sold code': headers.indexOf('sold code'),
           'sold name': headers.indexOf('sold name'),
           'sold quantity': headers.indexOf('sold quantity'),
-          'ae code': headers.indexOf('ae code') // AE support
+          'ae code': headers.indexOf('ae code')
         };
+
+        // Mkt. Value is the 31st column in the raw sheet (1-indexed) → index 30
+        const RAW_MKT_VALUE_COL_INDEX = 30;
 
         const tempData = {};
 
@@ -146,45 +149,52 @@
           const soldQty    = Number(row[idx['sold quantity']]);
           const aeCode     = idx['ae code'] >= 0 ? row[idx['ae code']] : undefined;
 
-          // AE acts like extra code trigger (same as SYS18/SYS27)
+          // Read Mkt. Value (raw 31st column)
+          let rawMktVal = Number(row[RAW_MKT_VALUE_COL_INDEX]) || 0;
+
+          // BUSINESS RULES:
           if (boughtCode === 'SYS18' || boughtCode === 'SYS27' || aeCode === 'SYS18' || aeCode === 'SYS27') {
             entry = {
               'Scrip Name': scripName,
               'Code': soldCode,
               'Name': soldName,
-              'Quantity': -Math.abs(soldQty)
+              'Quantity': -Math.abs(soldQty),
+              'Mkt. Value': rawMktVal
             };
           } else if (soldCode === 'SYS18' || soldCode === 'SYS27') {
             entry = {
               'Scrip Name': scripName,
               'Code': boughtCode,
               'Name': boughtName,
-              'Quantity': Math.abs(boughtQty)
+              'Quantity': Math.abs(boughtQty),
+              'Mkt. Value': rawMktVal
             };
           }
 
           if (entry) {
             const key = `${entry['Scrip Name']}|${entry['Name']}`;
             if (tempData[key]) {
-              tempData[key]['Quantity'] += entry['Quantity'];
+              tempData[key]['Quantity']   += entry['Quantity'];
+              tempData[key]['Mkt. Value'] += entry['Mkt. Value'];
             } else {
               tempData[key] = entry;
             }
           }
         });
 
-        // Keep only big trades (abs qty > 5000). Change this if you want all rows.
-        fullData = Object.values(tempData).filter(r => r.Quantity > 5000 || r.Quantity < -5000);
+        // FILTER: Mkt. Value > 999,999 and Quantity ≠ 0
+        fullData = Object.values(tempData).filter(r =>
+          (r['Mkt. Value'] > 999999) && (r['Quantity'] !== 0)
+        );
 
         document.getElementById("rowCount").innerText = fullData.length;
         displayTable(fullData);
         document.getElementById("downloadButton").style.display = 'inline-block';
 
-        // send ONLY the analyzed table rows
         if (fullData.length) {
           sendToGoogleSheet(fullData);
         } else {
-          alert("No rows met the filter (|Quantity| > 5000). Nothing sent.");
+          alert("No rows met the filter (Mkt. Value > 999,999 and Quantity ≠ 0). Nothing sent.");
         }
       };
 
@@ -200,6 +210,7 @@
             <td>${row['Code'] ?? ''}</td>
             <td>${row['Name'] ?? ''}</td>
             <td>${row['Quantity'] ?? ''}</td>
+            <td>${row['Mkt. Value'] ?? ''}</td>
           </tr>`;
         tbody.insertAdjacentHTML('beforeend', tr);
       });
