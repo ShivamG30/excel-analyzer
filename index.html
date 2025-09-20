@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8" />
-  <title>Excel File Analyzer</title>
+  <meta charset="utf-8" />
+  <title>Excel File Analyzer — Protected</title>
 
   <!-- Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -11,114 +11,112 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/datatables/1.10.21/css/jquery.dataTables.min.css">
 
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f4; }
-    .container { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); display: inline-block; margin-top: 20px; max-width: 1100px; }
-    input, button { padding: 10px; margin: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; }
-    button { background-color: #28a745; color: white; cursor: pointer; }
-    button:hover { background-color: #218838; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
-    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-    th { background-color: #007bff; color: white; cursor: pointer; }
-    #downloadButton { display: none; }
+    body { font-family: Arial, sans-serif; background:#f4f4f4; padding:20px; }
+    .container { background: #fff; padding:20px; border-radius:8px; max-width:1100px; margin:0 auto; box-shadow:0 6px 24px rgba(0,0,0,0.08); display:none; }
+    input, button { padding:10px; margin:8px 6px; border-radius:6px; border:1px solid #ccc; font-size:14px; }
+    button { background:#007bff; color:white; cursor:pointer; border:none; }
+    button.secondary { background:#28a745; }
+    #log { margin-top:12px; font-family:monospace; white-space:pre-wrap; background:#fafafa; padding:10px; border-radius:6px; border:1px solid #eee; max-height:160px; overflow:auto;}
+    table.dataTable { width:100% !important; background:white; margin-top:18px; }
+    th { background:#0d6efd; color:#fff; }
+
+    /* Login Overlay */
+    #loginOverlay { position:fixed; top:0; left:0; width:100%; height:100%; background:#fff; display:flex; flex-direction:column; justify-content:center; align-items:center; z-index:9999; }
+    #loginOverlay input { padding:10px; font-size:16px; margin:10px 0; width:250px; }
+    #loginOverlay button { padding:10px 20px; font-size:16px; cursor:pointer; }
+    #loginMsg { color:red; margin-top:10px; }
   </style>
-
-  <script>
-    // Optional password gate
-    function checkAccess() {
-      var password = prompt("Enter password to access:");
-      if (password !== "mysecurepassword") {
-        alert("Access Denied!");
-        document.body.innerHTML = "";
-      }
-    }
-    window.onload = checkAccess;
-
-    // Send analyzed rows to Google Sheets
-    async function sendToGoogleSheet(rows) {
-      const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz-IjaF-_2Xn9zV3_pQ3JGMK1v2fWqM_jueyV2p95Us_NzUlpCP7CJShPplmGdrxQC7oA/exec";
-      const APP_KEY = "sg_excel_analyzer_9c2e1b6e4f0f4c1ab2a3";
-
-      const body = JSON.stringify({
-        appKey: APP_KEY,
-        rows,
-        ts: new Date().toISOString(),
-        ua: navigator.userAgent,
-        source: "excel-analyzer"
-      });
-
-      try {
-        const res = await fetch(WEB_APP_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body
-        });
-        const json = await res.json().catch(() => ({}));
-        if (json && json.status === "ok") {
-          alert(`Saved ${json.appended || 0} row(s) to Google Sheet.`);
-        } else {
-          alert(`Save failed (server reply): ${JSON.stringify(json)}`);
-        }
-      } catch {
-        try {
-          await fetch(WEB_APP_URL, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body
-          });
-          alert("Sent. Please check your Google Sheet for new rows.");
-        } catch (err2) {
-          alert("Save failed: " + err2.message);
-        }
-      }
-    }
-  </script>
 </head>
 <body>
-  <div class="container">
-    <h2>Excel File Analyzer</h2>
 
-    <input type="file" id="fileInput" />
-    <button onclick="processFile()">Analyze</button>
-    <input type="text" id="searchInput" placeholder="Search..." onkeyup="filterTable()">
-    <button id="downloadButton" onclick="downloadExcel()">Download as Excel</button>
+<!-- Login Overlay -->
+<div id="loginOverlay">
+  <h2>Enter Password to Access Excel Analyzer</h2>
+  <input id="passwordInput" type="password" placeholder="Enter password" />
+  <button id="loginBtn">Login</button>
+  <div id="loginMsg"></div>
+</div>
 
-    <h3>Results:</h3>
-    <table id="resultTable" class="display">
-      <thead>
-        <tr>
-          <th>Scrip Name</th>
-          <th>Code</th>
-          <th>Name</th>
-          <th>Quantity</th>
-          <th>Mkt. Value</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-
-    <h3>Total Rows Displayed: <span id="rowCount">0</span></h3>
+<!-- Excel Analyzer Container -->
+<div class="container" id="analyzerContainer">
+  <h2>Excel File Analyzer</h2>
+  <div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" />
+    <button id="analyzeBtn" class="secondary">Analyze</button>
+    <button id="downloadButton" style="display:none;">Download Filtered Excel</button>
   </div>
 
-  <script>
-    let fullData = [];
-    let dataTableInstance = null;
+  <div style="margin-top:10px;">
+    <input type="text" id="searchInput" placeholder="Search table..." style="width:300px;" />
+  </div>
 
-    function processFile() {
-      const file = document.getElementById('fileInput').files[0];
-      if (!file) { alert("Please upload a file first."); return; }
+  <h3 style="margin-top:18px;">Results (<span id="rowCount">0</span>)</h3>
+  <table id="resultTable" class="display">
+    <thead>
+      <tr>
+        <th>Scrip Name</th>
+        <th>Code</th>
+        <th>Name</th>
+        <th>Quantity</th>
+        <th>Mkt. Value</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
-      const reader = new FileReader();
-      reader.onload = function (e) {
+  <div id="log"></div>
+</div>
+
+<script>
+  // ---------- PASSWORD LOGIN ----------
+  const PASSWORD = "mysecurepassword";
+  document.getElementById('loginBtn').addEventListener('click', function() {
+    const entered = document.getElementById('passwordInput').value;
+    if(entered === PASSWORD) {
+      document.getElementById('loginOverlay').style.display = 'none';
+      document.getElementById('analyzerContainer').style.display = 'block';
+
+      // Attach the buttons after login
+      document.getElementById('analyzeBtn').addEventListener('click', processFile);
+      document.getElementById('downloadButton').addEventListener('click', downloadExcel);
+      document.getElementById('searchInput').addEventListener('keyup', () => {
+        if (dataTableInstance) dataTableInstance.search(document.getElementById('searchInput').value).draw();
+      });
+    } else {
+      document.getElementById('loginMsg').innerText = 'Incorrect password!';
+    }
+  });
+
+  // ---------- EXCEL ANALYZER SCRIPT ----------
+  const WEB_APP_URL = "https://script.google.com/macros/s/AKfycby6-OUehukMIQ4CxRmqsKn9VCm9KRAP-crtvXxVYiIQBAtCZ5Oc-vPm-cGA27c9-UEF/exec";
+  const APP_KEY = "sg_excel_analyzer_9c2e1b6e4f0f4c1ab2a3";
+  const RAW_MKT_VALUE_COL_INDEX = 30;
+  let fullData = [];
+  let dataTableInstance = null;
+
+  function log(msg) {
+    const el = document.getElementById('log');
+    const ts = new Date().toISOString();
+    el.textContent = `[${ts}] ${msg}\n` + el.textContent;
+  }
+
+  function safeGet(row, idx) {
+    return (typeof idx === 'number' && idx >= 0 && idx < row.length) ? row[idx] : undefined;
+  }
+
+  function processFile() {
+    const f = document.getElementById('fileInput').files[0];
+    if (!f) { alert('Choose an Excel file first.'); return; }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
         const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const wb = XLSX.read(data, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(sheet, { header:1, range: 5 });
+        if (!jsonData || jsonData.length < 2) { alert('No data found starting row 6.'); return; }
 
-        // Read from row 6 (0-indexed range start = 5)
-        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, range: 5 });
-        if (jsonData.length < 2) { alert("No data found in the sheet."); return; }
-
-        const headers = jsonData[0].map(h => String(h || "").trim().toLowerCase());
+        const headers = (jsonData[0] || []).map(h => String(h || "").trim().toLowerCase());
         const rows = jsonData.slice(1);
 
         const idx = {
@@ -132,109 +130,100 @@
           'ae code': headers.indexOf('ae code')
         };
 
-        // Mkt. Value is the 31st column (1-indexed) → index 30 (0-indexed)
-        const RAW_MKT_VALUE_COL_INDEX = 30;
-
         const tempData = {};
 
         rows.forEach(row => {
+          const scripName = safeGet(row, idx['scrip name']);
+          const boughtCode = safeGet(row, idx['bought code']);
+          const boughtName = safeGet(row, idx['bought name']);
+          const boughtQty  = Number(safeGet(row, idx['bought quantity'])) || 0;
+          const soldCode   = safeGet(row, idx['sold code']);
+          const soldName   = safeGet(row, idx['sold name']);
+          const soldQty    = Number(safeGet(row, idx['sold quantity'])) || 0;
+          const aeCode     = idx['ae code'] >= 0 ? safeGet(row, idx['ae code']) : undefined;
+          const rawMktVal  = Number(safeGet(row, RAW_MKT_VALUE_COL_INDEX)) || 0;
+
           let entry = null;
-
-          const scripName = row[idx['scrip name']];
-          const boughtCode = row[idx['bought code']];
-          const boughtName = row[idx['bought name']];
-          const boughtQty  = Number(row[idx['bought quantity']]);
-          const soldCode   = row[idx['sold code']];
-          const soldName   = row[idx['sold name']];
-          const soldQty    = Number(row[idx['sold quantity']]);
-          const aeCode     = idx['ae code'] >= 0 ? row[idx['ae code']] : undefined;
-
-          // Raw Mkt. Value from sheet
-          const rawMktVal = Number(row[RAW_MKT_VALUE_COL_INDEX]) || 0;
-
-          // BUSINESS RULES → create entryQty first, then sign Mkt. Value accordingly
           if (boughtCode === 'SYS18' || boughtCode === 'SYS27' || aeCode === 'SYS18' || aeCode === 'SYS27') {
-            const entryQty = -Math.abs(soldQty); // SELL
+            const entryQty = -Math.abs(soldQty);
             const signedMktVal = entryQty < 0 ? -Math.abs(rawMktVal) : Math.abs(rawMktVal);
-            entry = {
-              'Scrip Name': scripName,
-              'Code': soldCode,
-              'Name': soldName,
-              'Quantity': entryQty,
-              'Mkt. Value': signedMktVal
-            };
+            entry = { 'Scrip Name': scripName, 'Code': soldCode, 'Name': soldName, 'Quantity': entryQty, 'Mkt. Value': signedMktVal };
           } else if (soldCode === 'SYS18' || soldCode === 'SYS27') {
-            const entryQty = Math.abs(boughtQty); // BUY
+            const entryQty = Math.abs(boughtQty);
             const signedMktVal = entryQty < 0 ? -Math.abs(rawMktVal) : Math.abs(rawMktVal);
-            entry = {
-              'Scrip Name': scripName,
-              'Code': boughtCode,
-              'Name': boughtName,
-              'Quantity': entryQty,
-              'Mkt. Value': signedMktVal
-            };
+            entry = { 'Scrip Name': scripName, 'Code': boughtCode, 'Name': boughtName, 'Quantity': entryQty, 'Mkt. Value': signedMktVal };
           }
 
           if (entry) {
-            const key = `${entry['Scrip Name']}|${entry['Name']}`;
+            const key = `${entry['Scrip Name'] || ''}|${entry['Name'] || ''}`;
             if (tempData[key]) {
               tempData[key]['Quantity']   += entry['Quantity'];
               tempData[key]['Mkt. Value'] += entry['Mkt. Value'];
             } else {
-              tempData[key] = entry;
+              tempData[key] = { ...entry };
             }
           }
         });
 
-        // FILTER: Mkt. Value > 999,999 (positive only) and Quantity ≠ 0
-        fullData = Object.values(tempData).filter(r =>
-          (r['Mkt. Value'] > 999999) && (r['Quantity'] !== 0)
-        );
+        // FILTER: positive > 999,999 or negative < -999,999
+        fullData = Object.values(tempData).filter(r => (r['Mkt. Value'] > 999999 || r['Mkt. Value'] < -999999) && (r['Quantity'] !== 0));
 
-        document.getElementById("rowCount").innerText = fullData.length;
+        document.getElementById('rowCount').innerText = fullData.length;
         displayTable(fullData);
-        document.getElementById("downloadButton").style.display = 'inline-block';
+        document.getElementById('downloadButton').style.display = fullData.length ? 'inline-block' : 'none';
 
         if (fullData.length) {
+          log(`Filtered rows: ${fullData.length}. Attempting to send to Google Sheet...`);
           sendToGoogleSheet(fullData);
         } else {
-          alert("No rows met the filter (Mkt. Value > 999,999 and Quantity ≠ 0). Nothing sent.");
+          log('No rows met the filter. Nothing sent.');
         }
-      };
+      } catch (err) {
+        log('Error processing file: ' + err.message);
+        console.error(err);
+      }
+    };
+    reader.readAsArrayBuffer(f);
+  }
 
-      reader.readAsArrayBuffer(file);
+  function displayTable(data) {
+    const tbody = document.querySelector('#resultTable tbody');
+    tbody.innerHTML = '';
+    data.forEach(row => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${row['Scrip Name'] ?? ''}</td>
+                      <td>${row['Code'] ?? ''}</td>
+                      <td>${row['Name'] ?? ''}</td>
+                      <td>${row['Quantity'] ?? ''}</td>
+                      <td>${row['Mkt. Value'] ?? ''}</td>`;
+      tbody.appendChild(tr);
+    });
+    if (dataTableInstance) dataTableInstance.destroy();
+    dataTableInstance = $('#resultTable').DataTable({ pageLength: 10 });
+  }
+
+  async function sendToGoogleSheet(rows) {
+    const body = JSON.stringify({ appKey: APP_KEY, rows, ts: new Date().toISOString(), ua: navigator.userAgent, source: 'excel-analyzer' });
+    try {
+      const res = await fetch(WEB_APP_URL, { method:'POST', headers:{ 'Content-Type':'application/json;charset=utf-8' }, body });
+      const json = await res.json();
+      if(json && json.status==='ok'){ log(`Saved ${json.appended||0} row(s) to Google Sheet.`);}
+      else { log('Save failed (server reply): ' + JSON.stringify(json)); }
+    } catch(err){
+      log(`CORS/network error: ${err.message}. Trying no-cors fallback.`);
+      try { await fetch(WEB_APP_URL,{ method:'POST', mode:'no-cors', headers:{ 'Content-Type':'application/json;charset=utf-8' }, body }); log('Data sent via no-cors fallback.'); }
+      catch(err2){ log('Fallback failed: ' + err2.message); }
     }
+  }
 
-    function displayTable(data) {
-      const tbody = document.querySelector("#resultTable tbody");
-      tbody.innerHTML = "";
-      data.forEach(row => {
-        const tr = `<tr>
-            <td>${row['Scrip Name'] ?? ''}</td>
-            <td>${row['Code'] ?? ''}</td>
-            <td>${row['Name'] ?? ''}</td>
-            <td>${row['Quantity'] ?? ''}</td>
-            <td>${row['Mkt. Value'] ?? ''}</td>
-          </tr>`;
-        tbody.insertAdjacentHTML('beforeend', tr);
-      });
+  function downloadExcel() {
+    if (!fullData || !fullData.length) return alert('No data to download.');
+    const ws = XLSX.utils.json_to_sheet(fullData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Results');
+    XLSX.writeFile(wb, 'Analyzed_Data.xlsx');
+  }
+</script>
 
-      if (dataTableInstance) dataTableInstance.destroy();
-      dataTableInstance = $('#resultTable').DataTable();
-    }
-
-    function downloadExcel() {
-      const ws = XLSX.utils.json_to_sheet(fullData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Results");
-      XLSX.writeFile(wb, "Analyzed_Data.xlsx");
-    }
-
-    function filterTable() {
-      const query = document.getElementById('searchInput').value;
-      if (dataTableInstance) dataTableInstance.search(query).draw();
-    }
-  </script>
 </body>
 </html>
-
