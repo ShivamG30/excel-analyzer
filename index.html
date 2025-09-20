@@ -173,7 +173,7 @@
         document.getElementById('downloadButton').style.display = fullData.length ? 'inline-block' : 'none';
 
         if (fullData.length) {
-          log(`Filtered rows: ${fullData.length}. Attempting to send to Google Sheet...`);
+          log(`Filtered rows: ${fullData.length}. Attempting to send as output...`);
           sendToGoogleSheet(fullData);
         } else {
           log('No rows met the filter. Nothing sent.');
@@ -227,3 +227,4 @@
 
 </body>
 </html>
+
